@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An illustrated explanation of KV-streams, a method for avoiding repeated prefill during context compaction in agentic reinforcement learning.">
+  <meta name="theme-color" content="#ffffff">
+  <title>KV-streams for Efficient Compaction in Agentic Reinforcement Learning</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%232f6fb6'/%3E%3Cpath d='M16 15h8v14l13-14h10L32 31l16 18H38L24 34v15h-8z' fill='white'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --ink: #202124;
+      --muted: #62676d;
+      --rule: #e3e5e8;
+      --link: #2f6fb6;
+      --link-hover: #174f91;
+      --blue: #96bae8;
+      --blue-dark: #4979b7;
+      --purple: #705bc6;
+      --green: #91c77b;
+      --gray: #d7d9dd;
+      --soft: #f6f7f8;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: #fff; color: var(--ink); font-family: var(--sans); font-size: 17px; line-height: 1.62; -webkit-font-smoothing: antialiased; }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { color: var(--link-hover); text-decoration: underline; text-underline-offset: 2px; }
+    img { max-width: 100%; }
+
+    .page { width: min(1100px, calc(100% - 48px)); margin: 0 auto; padding: 55px 0 70px; }
+    .paper-header { padding-bottom: 18px; border-bottom: 1px solid var(--rule); }
+    h1 { margin: 0 0 8px; font-size: clamp(2rem, 3.25vw, 2.7rem); line-height: 1.18; letter-spacing: -.035em; font-weight: 720; }
+    .authors { margin: 0 0 2px; color: var(--link); font-size: .95rem; line-height: 1.55; }
+    .author-note { margin: 0; color: var(--muted); font-size: .76rem; }
+    .based-on { margin: 5px 0 0; font-size: .96rem; }
+
+    article { padding-top: 4px; }
+    h2 { margin: 56px 0 18px; font-size: 1.72rem; line-height: 1.25; letter-spacing: -.02em; }
+    h3 { margin: 36px 0 12px; font-size: 1.3rem; line-height: 1.3; letter-spacing: -.01em; }
+    p { margin: 0 0 18px; }
+    ul, ol { margin: 0 0 20px; padding-left: 24px; }
+    li { margin: 7px 0; }
+    strong { font-weight: 650; }
+    code { font-family: var(--mono); font-size: .88em; }
+
+    figure { margin: 35px 0 46px; }
+    figcaption { margin-top: 12px; color: var(--muted); font-size: .83rem; line-height: 1.5; }
+    .figure-title { color: var(--ink); font-weight: 650; }
+
+    .paper-figure { width: min(100%, 1020px); margin-left: auto; margin-right: auto; }
+    .paper-figure img { display: block; width: 100%; height: auto; }
+    .paper-figure.narrow { width: min(100%, 560px); }
+    .lead-figure { margin-top: 32px; }
+    .strategy-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 34px; margin: 22px 0 30px; }
+    .strategy-list div { padding: 13px 0; border-top: 1px solid var(--rule); }
+    .strategy-list dt { font-weight: 650; }
+    .strategy-list dd { margin: 3px 0 0; color: var(--muted); font-size: .91rem; line-height: 1.5; }
+
+    details { margin: 7px 0; }
+    summary { cursor: pointer; color: var(--ink); font-size: .92rem; font-weight: 600; }
+    summary:hover { color: var(--link); }
+    .expand-note { color: var(--muted); font-weight: 400; }
+    .detail-body { margin: 12px 0 18px 20px; padding: 14px 18px; border-left: 3px solid var(--rule); color: #35383c; font-size: .91rem; }
+    .detail-body > :last-child { margin-bottom: 0; }
+
+    .equation { margin: 28px auto; padding: 18px 20px; overflow-x: auto; text-align: center; font-family: Georgia, "Times New Roman", serif; font-size: 1.35rem; line-height: 1.65; white-space: nowrap; }
+    .equation .zero { margin-left: 48px; color: var(--link); }
+
+    .gif-figure figcaption { max-width: 900px; }
+
+    .references { font-size: .91rem; }
+    .references p { padding-left: 120px; text-indent: -120px; }
+    pre { max-width: 100%; margin: 0; padding: 15px; overflow-x: auto; background: var(--soft); font: .78rem/1.55 var(--mono); white-space: pre; }
+
+    footer { margin-top: 62px; padding-top: 18px; border-top: 1px solid var(--rule); color: var(--muted); font-size: .76rem; }
+
+    @media (max-width: 760px) {
+      body { font-size: 16px; }
+      .page { width: min(100% - 32px, 1100px); padding-top: 32px; }
+      h1 { font-size: 2rem; }
+      h2 { margin-top: 45px; font-size: 1.52rem; }
+      .strategy-list { grid-template-columns: 1fr; gap: 0; }
+      .equation { font-size: 1.08rem; text-align: left; }
+      .equation .zero { margin-left: 25px; }
+      .references p { padding-left: 0; text-indent: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="paper-header">
+      <h1>KV-streams for Efficient Compaction in Agentic Reinforcement Learning</h1>
+      <p class="authors"><a href="https://emilianopp.com/#/home" target="_blank" rel="noreferrer">Emiliano Penaloza</a>, Dane Malenfant, Dheeraj Vattikonda, Roger Creus Castanyer, Siddarth Venkatraman, Abhay Puri, Jonathan Light, Matthew James Sargent, Augustine N. Mavor-Parker, Massimo Caccia, Lucas Caccia, Glen Berseth, Esmeralda S. Whitammer, Alessandro Sordoni, Minseon Kim, Marc-Alexandre Côté, Laurent Charlin, Guillaume Lajoie</p>
+      <p class="author-note">Core contributors: Emiliano Penaloza and Dane Malenfant · Equal advising: Laurent Charlin and Guillaume Lajoie</p>
+      <p class="based-on">This post is based on our recent work: <a href="assets/kv-streams-paper.pdf" target="_blank">KV-streams for Efficient Compaction in Agentic Reinforcement Learning</a> · <a href="https://github.com/Emilianopp/KV-streams" target="_blank" rel="noreferrer">Code</a></p>
+    </header>
+
+    <article>
+      <figure class="paper-figure lead-figure gif-figure" aria-labelledby="figure-1-caption">
+        <img src="assets/paper-figures/reward-time-results.gif" width="2513" height="888" fetchpriority="high" alt="Animated reveal of final success rate against GPU hours and wall-clock hours on TextWorld, ALFWorld, and SWE-bench Verified">
+        <figcaption id="figure-1-caption"><span class="figure-title">Figure 1.</span> Final evaluation score against total training compute. Circles show KV-streams, squares show re-prefill compaction, and diamonds show full context.</figcaption>
+      </figure>
+
+      <h2 id="overview">Overview</h2>
+      <p>Long-horizon agents accumulate a growing text history and a corresponding key–value (KV) cache. Context compaction keeps memory bounded by deleting, selecting, or summarizing earlier turns. Conventional implementations then prefill the compacted context into a new trace, causing the model to process retained tokens again.</p>
+      <p>KV-streams avoids that repeated prefill. The inference engine evicts selected KV entries while preserving the rest of the cache. The trainer applies a custom attention mask that reproduces the same eviction pattern over one continuous trajectory.</p>
+      <p>We test the method with four compaction strategies on TextWorld, ALFWorld, and SWE-bench Verified. The main questions are whether KV-streams reduces training time, preserves task performance, and allows retained KVs to carry information after the source text has been removed.</p>
+
+      <details><summary>Supplemental reading <span class="expand-note">(click to expand)</span></summary><div class="detail-body"><ul><li><a href="#method">How KV-streams works</a> contrasts re-prefill with cache eviction.</li><li><a href="#repeated-prefill">Why repeated prefill is expensive</a> gives the extra-compute term.</li><li><a href="#text-games">Text-based games</a> and <a href="#swe">SWE-bench Verified</a> report the main results.</li><li><a href="#retrieval">Recurrent state after eviction</a> covers the controlled retrieval experiments.</li></ul></div></details>
+      <details><summary>Notation <span class="expand-note">(click to expand)</span></summary><div class="detail-body"><p><code>N</code> is the rollout length, <code>B</code> the context budget, and <code>r</code> the number of entries retained after compaction. A compaction operator <code>κ</code> maps the current context <code>C</code> to a shorter context <code>κ(C)</code>.</p></div></details>
+      <details><summary>Experimental setup <span class="expand-note">(click to expand)</span></summary><div class="detail-body"><p>Text-game experiments use Qwen3-4B-Instruct-2507. Software-engineering experiments use Qwen3.5-4B on SWE-bench Verified. ALFWorld training uses multiple seeds. TextWorld and software-engineering training use one seed because of compute cost; the final SWE-bench checkpoint is evaluated over three seeds.</p></div></details>
+      <details><summary>Cite this work <span class="expand-note">(click to expand)</span></summary><div class="detail-body"><pre>@misc{penaloza2026kvstreams,
+  title  = {KV-streams for Efficient Compaction in
+            Agentic Reinforcement Learning},
+  author = {Penaloza, Emiliano and Malenfant, Dane and others},
+  year   = {2026},
+  note   = {Manuscript}
+}</pre></div></details>
+
+      <h2 id="method">How KV-streams works</h2>
+      <p>Re-prefill compaction breaks a rollout into separate traces. After each compaction, every retained token is processed again. KV-streams instead removes the selected KV entries in place and continues the same trace. During training, the custom mask blocks attention to the deleted span, matching the visibility pattern used at inference time.</p>
+      <figure class="paper-figure gif-figure" aria-labelledby="figure-2-caption">
+        <img src="assets/paper-figures/how-kv-streams-works.gif" width="2475" height="988" loading="eager" alt="Animated diagram comparing prefill compaction with KV-streams and then revealing four evaluated compaction strategies">
+        <figcaption id="figure-2-caption"><span class="figure-title">Figure 2.</span> Left: re-prefill starts a new trace, while KV-streams carries the retained cache forward and trains with an eviction-aware mask. Right: the four tested compaction strategies.</figcaption>
+      </figure>
+
+      <h3>Compaction strategies</h3>
+      <dl class="strategy-list">
+        <div><dt>Summary</dt><dd>Drop the prior context and replace it with a generated summary.</dd></div>
+        <div><dt>Markovian Thinker</dt><dd>Delete half of the context at each compaction without replacement.</dd></div>
+        <div><dt>Sliding Window</dt><dd>Keep almost the full recent window, the highest-retention setting.</dd></div>
+        <div><dt>Markovian Pick</dt><dd>Let the model choose which turns to retain and delete the rest.</dd></div>
+      </dl>
+
+      <h2 id="repeated-prefill">Why repeated prefill is expensive</h2>
+      <p>Suppose a context has budget <em>B</em>. After compaction, <em>r</em> entries remain, so the model can generate <em>B − r</em> new entries before the next compaction. A rollout of length <em>N</em> compacts approximately <em>N/(B − r)</em> times. If each compaction prefills all <em>r</em> retained entries, the additional work is:</p>
+      <div class="equation" aria-label="Extra prefill work equals N times r divided by B minus r; KV-streams adds zero extra prefill work">Δ<sub>re-prefill</sub> = N · r / (B − r) <span class="zero">Δ<sub>KV-streams</sub> = 0</span></div>
+      <p>The cost grows as the retained context approaches the budget. Reducing the number of compactions or retaining fewer entries lowers the overhead but does not remove it.</p>
+
+      <h2 id="results">Experimental results</h2>
+      <h3 id="text-games">Text-based games</h3>
+      <p>On TextWorld, KV-streams reaches the final performance of the corresponding re-prefill runs with 3.7×–11.3× fewer GPU-hours while performing similarly or better. On ALFWorld, where trajectories are shorter, training throughput improves by 1.3×–3.0× with no observed loss in final success rate.</p>
+      <figure class="paper-figure" aria-labelledby="figure-4-caption">
+        <img src="assets/paper-figures/figure-4-text-games.png" width="2463" height="1250" loading="lazy" alt="Success rate against GPU hours and wall-clock hours for four compaction strategies on TextWorld and ALFWorld">
+        <figcaption id="figure-4-caption"><span class="figure-title">Figure 4.</span> TextWorld and ALFWorld success rate against training compute. Solid lines are re-prefill runs; dashed lines are KV-streams runs.</figcaption>
+      </figure>
+
+      <h3 id="swe">SWE-bench Verified</h3>
+      <p>Sliding-window KV-streams reaches 52.7 ± 2.1%, compared with 51.5 ± 1.2% for full context and 53.4 ± 0.2% for re-prefill Markovian Thinker. It reaches peak performance in about 20 hours, versus more than 65 hours for full context. With Markovian Thinker, the corresponding times are about 32 and 60 hours.</p>
+      <figure class="paper-figure" aria-labelledby="figure-6-caption">
+        <img src="assets/paper-figures/figure-6-swe.png" width="2463" height="1275" loading="lazy" alt="SWE-bench Verified evaluation success rate and training reward against GPU hours and wall-clock hours">
+        <figcaption id="figure-6-caption"><span class="figure-title">Figure 6.</span> SWE-bench Verified success rate and training reward. KV-streams reaches peak performance about 3× faster than full context and about 2× faster than re-prefill compaction.</figcaption>
+      </figure>
+
+      <h2 id="sft">Is SFT needed first?</h2>
+      <p>The paper compares reinforcement learning from the base model with an SFT warm start followed by RL. Once the GPU time spent on SFT is included, RL alone is more compute-efficient and shows no observed performance drop. SFT adds substantial delay for Markovian Thinker; with sliding window, both routes reach peak performance in approximately the same total time.</p>
+      <figure class="paper-figure narrow" aria-labelledby="figure-7-caption">
+        <img src="assets/paper-figures/figure-7b-sft-vs-rl.png" width="1170" height="1190" loading="lazy" alt="TextWorld success rate versus GPU hours comparing SFT followed by reinforcement learning with reinforcement learning alone">
+        <figcaption id="figure-7-caption"><span class="figure-title">Figure 7B.</span> SFT + RL compared with RL only on TextWorld. The arrow marks the GPU time spent on SFT before RL begins.</figcaption>
+      </figure>
+
+      <h2 id="retrieval">Recurrent state after eviction</h2>
+      <p>Retained KVs attended to text that may no longer be visible, so the cache can act as a recurrent state. The controlled experiment assigns an object, makes the model decode a sequence, evicts the assignment, and then asks for the object. The answer cannot be recovered from the active text.</p>
+      <figure class="paper-figure" aria-labelledby="figure-8-caption">
+        <img src="assets/paper-figures/figure-8-recurrent-results.png" width="2475" height="1625" loading="lazy" alt="Three post-eviction retrieval experiments showing in-distribution fruit recall, generalization to actor names, and recall of a zero-support television target across KV-cache budgets">
+        <figcaption id="figure-8-caption"><span class="figure-title">Figure 8.</span> Post-eviction retrieval across KV-cache budgets: held-out fruit assignments, generalization to actor names, and a target that initially has zero support. RL alone reaches 100% at the largest cache budget in the in-distribution and zero-support settings.</figcaption>
+      </figure>
+
+      <h3 id="fruit-demo">Fruit recall after eviction</h3>
+      <p>The animation isolates the sequence used in the first retrieval setting: assign a fruit, remove the assigning turn from the active context, and query the model later. Only the retained KV state can carry the assignment forward.</p>
+      <figure class="paper-figure gif-figure" aria-labelledby="fruit-caption"><img src="assets/fruit-recall-after-eviction.gif" width="1600" height="640" loading="lazy" alt="Animated sequence in which a fruit assignment is evicted from text while its KV state is retained for a later recall question"><figcaption id="fruit-caption"><span class="figure-title">Fruit recall animation.</span> The assigning text is absent when the model receives the final question.</figcaption></figure>
+
+      <h2 id="discussion">Discussion and limitations</h2>
+      <p>KV-streams removes a systems cost introduced by common compaction pipelines. The experiments show lower training compute without evidence of reduced final performance for the tested models and tasks. They also show that an evicted text span can continue to influence generation through retained KVs.</p>
+      <p>The evidence has clear limits. TextWorld and software-engineering training use a single seed, although the final SWE-bench checkpoint is evaluated over three seeds. The models are in the 4B parameter range. The recurrent-state result comes from a controlled retrieval task and does not imply reliable long-term memory in arbitrary environments. KV-streams also requires coordinated inference-time eviction and trainer masking; the public code covers a subset of the experiments.</p>
+
+      <h2 id="references">Paper and code</h2>
+      <div class="references">
+        <p><strong>[Penaloza et al., 2026]</strong> Emiliano Penaloza, Dane Malenfant, Dheeraj Vattikonda, et al. <em>KV-streams for Efficient Compaction in Agentic Reinforcement Learning.</em> <a href="assets/kv-streams-paper.pdf" target="_blank">Paper PDF</a>.</p>
+        <p><strong>[Code]</strong> <a href="https://github.com/Emilianopp/KV-streams" target="_blank" rel="noreferrer">KV-streams repository</a> and <a href="https://github.com/Emilianopp/sglang" target="_blank" rel="noreferrer">SGLang fork</a>.</p>
+      </div>
+    </article>
+
+    <footer>© 2026 KV-streams for Efficient Compaction in Agentic Reinforcement Learning</footer>
+  </main>
+</body>
+</html>
